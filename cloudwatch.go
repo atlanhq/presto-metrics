@@ -6,9 +6,26 @@ import (
 	"github.com/aws/aws-sdk-go/aws/client"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/cloudwatch"
+	"github.com/montanaflynn/stats"
 	"reflect"
 	"strings"
 )
+
+func Sum(data stats.Float64Data) float64 {
+	sum, err := stats.Sum(data)
+	if err != nil {
+		fmt.Println("Error ", err)
+	}
+	return sum
+}
+
+func Median(data stats.Float64Data) float64 {
+	median, err := stats.Median(data)
+	if err != nil {
+		fmt.Println("Error: ", err)
+	}
+	return median
+}
 
 type CloudWatch struct {
 	*client.Client
@@ -51,6 +68,15 @@ func (c *CloudWatch) PutClusterMetricData(host string, port string, namespace st
 	return nil
 }
 
+type ClusterMemoryMetrics struct {
+	ClusterGeneralPoolFreeMemory       float64
+	ClusterGeneralPoolTotalMemory      float64
+	ClusterGeneralPoolReservedMemory   float64
+	ClusterGeneralPoolRevocableMemory  float64
+	MedianWorkersGeneralPoolFreeMemory float64
+	MeanWorkerGeneralFreePoolMemory    float64
+}
+
 func (c *CloudWatch) PutWorkerMetricData(host string, port string, namespace string, stackName string) error {
 	svc := cloudwatch.New(session.Must(session.NewSession()),
 		aws.NewConfig().WithRegion("ap-south-1"))
@@ -61,6 +87,11 @@ func (c *CloudWatch) PutWorkerMetricData(host string, port string, namespace str
 	var metricsData []*cloudwatch.MetricDatum
 	workers := workers{}
 	workers, _ = workers.collect(host, port)
+	var clusterGeneralPoolTotalMemory []float64
+	var clusterGeneralPoolFreeMemory []float64
+	var clusterGeneralPoolReservedMemory []float64
+	var clusterGeneralPoolRevocableMemory []float64
+
 	for k, _ := range workers {
 		wm := workerMetrics{}
 		workerId := strings.Split(k, " ")[0]
@@ -69,6 +100,10 @@ func (c *CloudWatch) PutWorkerMetricData(host string, port string, namespace str
 			fmt.Println(err)
 			return err
 		}
+		clusterGeneralPoolFreeMemory = append(clusterGeneralPoolFreeMemory, float64(wm.MemoryInfo.Pools.General.FreeBytes))
+		clusterGeneralPoolTotalMemory = append(clusterGeneralPoolTotalMemory, float64(wm.MemoryInfo.Pools.General.MaxBytes))
+		clusterGeneralPoolReservedMemory = append(clusterGeneralPoolReservedMemory, float64(wm.MemoryInfo.Pools.General.ReservedBytes))
+		clusterGeneralPoolRevocableMemory = append(clusterGeneralPoolRevocableMemory, float64(wm.MemoryInfo.Pools.General.ReservedRevocableBytes))
 
 		v := reflect.ValueOf(wm)
 		typeOfS := v.Type()
@@ -100,12 +135,49 @@ func (c *CloudWatch) PutWorkerMetricData(host string, port string, namespace str
 			metricsData = append(metricsData, metricData)
 		}
 	}
+
 	metricInput.SetMetricData(metricsData)
 	_, err := svc.PutMetricData(metricInput)
 	if err != nil {
 		_ = fmt.Errorf("%s", err)
 		return err
 	}
+
+	// cluster memory metrics
+	metricInput = new(cloudwatch.PutMetricDataInput)
+	metricInput.SetNamespace(namespace)
+	var clusterMetricsData []*cloudwatch.MetricDatum
+
+	clusterMemoryMetrics := ClusterMemoryMetrics{
+		Sum(clusterGeneralPoolFreeMemory),
+		Sum(clusterGeneralPoolTotalMemory),
+		Sum(clusterGeneralPoolReservedMemory),
+		Sum(clusterGeneralPoolRevocableMemory),
+		Median(clusterGeneralPoolFreeMemory),
+		Sum(clusterGeneralPoolFreeMemory) / float64(len(workers)),
+	}
+	v := reflect.ValueOf(clusterMemoryMetrics)
+	typeOfS := v.Type()
+	for i := 0; i < v.NumField(); i++ {
+		metricData := new(cloudwatch.MetricDatum)
+		metricData.SetMetricName(typeOfS.Field(i).Name)
+		metricData.SetValue(v.Field(i).Interface().(float64))
+		metricData.SetUnit("None")
+		var dimensions []*cloudwatch.Dimension
+		dimension := new(cloudwatch.Dimension)
+		dimension.SetName("prestoStackName")
+		dimension.SetValue(stackName)
+		dimensions = append(dimensions, dimension)
+		metricData.SetDimensions(dimensions)
+		clusterMetricsData = append(clusterMetricsData, metricData)
+	}
+	metricInput.SetMetricData(clusterMetricsData)
+	_, err = svc.PutMetricData(metricInput)
+	if err != nil {
+		_ = fmt.Errorf("%s", err)
+		return err
+	}
+
 	return nil
 }
 

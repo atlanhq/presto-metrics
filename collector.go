@@ -48,25 +48,27 @@ type workerMetrics struct {
 	NodeVersion     struct {
 		Version string `json:"version"`
 	} `json:"nodeVersion"`
-	Pools struct {
-		General struct {
-			FreeBytes                int64 `json:"freeBytes"`
-			MaxBytes                 int64 `json:"maxBytes"`
-			ReservedBytes            int64 `json:"reservedBytes"`
-			ReservedRevocableBytes   int64 `json:"reservedRevocableBytes"`
-			QueryMemoryAllocationMap map[string][]struct {
-				Allocation int64  `json:"allocation"`
-				Tag        string `json:"tag"`
-			} `json:"queryMemoryAllocations"`
-			QueryMemoryReservations map[string]int64 `json:"queryMemoryReservations"`
-		} `json:"general"`
-		Reserved struct {
-			FreeBytes              int64 `json:"freeBytes"`
-			MaxBytes               int64 `json:"maxBytes"`
-			ReservedBytes          int64 `json:"reservedBytes"`
-			ReservedRevocableBytes int64 `json:"reservedRevocableBytes"`
-		} `json:"reserved"`
-	} `json:"pools"`
+	MemoryInfo struct {
+		Pools struct {
+			General struct {
+				FreeBytes                int64 `json:"freeBytes"`
+				MaxBytes                 int64 `json:"maxBytes"`
+				ReservedBytes            int64 `json:"reservedBytes"`
+				ReservedRevocableBytes   int64 `json:"reservedRevocableBytes"`
+				QueryMemoryAllocationMap map[string][]struct {
+					Allocation int64  `json:"allocation"`
+					Tag        string `json:"tag"`
+				} `json:"queryMemoryAllocations"`
+				QueryMemoryReservations map[string]int64 `json:"queryMemoryReservations"`
+			} `json:"general"`
+			Reserved struct {
+				FreeBytes              int64 `json:"freeBytes"`
+				MaxBytes               int64 `json:"maxBytes"`
+				ReservedBytes          int64 `json:"reservedBytes"`
+				ReservedRevocableBytes int64 `json:"reservedRevocableBytes"`
+			} `json:"reserved"`
+		} `json:"pools"`
+	} `json:"memoryInfo"`
 	TotalNodeMemory int64 `json:"totalNodeMemory"`
 }
 
