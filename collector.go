@@ -42,7 +42,7 @@ type workerMetrics struct {
 	NonHeapUsed     int64   `json:"nonHeapUsed"`
 	ProcessCpuLoad  float64 `json:"processCpuLoad"`
 	SystemCpuLoad   float64 `json:"systemCpuLoad"`
-	Uptime          float64 `json:"uptime"`
+	Uptime          string  `json:"uptime"`
 	InternalAddress string  `json:"internalAddress"`
 	NodeId          string  `json:"nodeId"`
 	NodeVersion     struct {

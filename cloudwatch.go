@@ -81,7 +81,7 @@ func (c *CloudWatch) PutWorkerMetricData(host string, port string, namespace str
 			case float64:
 				metricData.SetValue(values[i].(float64))
 			case int64:
-				metricData.SetValue(float64(int64(values[i].(int64))))
+				metricData.SetValue(float64(values[i].(int64)))
 			default:
 				fmt.Println(g)
 				continue
