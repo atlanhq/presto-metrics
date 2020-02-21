@@ -5,8 +5,6 @@ import (
 	"github.com/prometheus/common/log"
 	"io/ioutil"
 	"net/http"
-	"os"
-	"strings"
 )
 
 type worker struct {
@@ -15,25 +13,26 @@ type worker struct {
 
 type workers map[string]worker
 
-func (w workers) collect(host string, port string) {
+func (w workers) collect(host string, port string) (workers, error) {
 	resp, err := http.Get("http://" + host + ":" + port + "/v1/cluster/workerMemory")
 	if err != nil {
 		log.Errorf("%s", err)
-		return
+		return workers{}, err
 	}
 	if resp.StatusCode != 200 {
 		log.Errorf("%s", err)
-		return
+		return workers{}, err
 	}
 	defer resp.Body.Close()
 
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		log.Errorf("%s", err)
-		return
+		return workers{}, err
 	}
 
 	_ = json.Unmarshal(body, &w)
+	return w, nil
 }
 
 type workerMetrics struct {
@@ -71,26 +70,27 @@ type workerMetrics struct {
 	TotalNodeMemory int64 `json:"totalNodeMemory"`
 }
 
-func (wm workerMetrics) collect(host string, port string, nodeId string) {
+func (wm workerMetrics) collect(host string, port string, nodeId string) (workerMetrics, error) {
 	resp, err := http.Get("http://" + host + ":" + port + "/v1/worker/" + nodeId + "/status")
 	if err != nil {
 		log.Errorf("%s", err)
-		return
+		return workerMetrics{}, err
 	}
 	if resp.StatusCode != 200 {
 		log.Errorf("%s", resp.StatusCode)
 		log.Errorf("%s", err)
-		return
+		return workerMetrics{}, err
 	}
 	defer resp.Body.Close()
 
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		log.Errorf("%s", err)
-		return
+		return workerMetrics{}, err
 	}
 
 	_ = json.Unmarshal(body, &wm)
+	return wm, nil
 }
 
 type clusterQuery struct {
@@ -122,28 +122,29 @@ type clusterQuery struct {
 
 type clusterQueries []clusterQuery
 
-func (cq clusterQueries) collect(host string, port string) {
+func (cq clusterQueries) collect(host string, port string) (clusterQueries, error) {
 	resp, err := http.Get("http://" + host + ":" + port + "/v1/query?state=RUNNING")
 	if err != nil {
 		log.Errorf("%s", err)
-		return
+		return clusterQueries{}, err
 	}
 	if resp.StatusCode != 200 {
 		log.Errorf("%s", err)
-		return
+		return clusterQueries{}, err
 	}
 	defer resp.Body.Close()
 
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		log.Errorf("%s", err)
-		return
+		return clusterQueries{}, err
 	}
 
 	_ = json.Unmarshal(body, &cq)
+	return cq, nil
 }
 
-type clusterMetrics struct {
+type ClusterMetrics struct {
 	RunningQueries   float64 `json:"runningQueries"`
 	BlockedQueries   float64 `json:"blockedQueries"`
 	QueuedQueries    float64 `json:"queuedQueries"`
@@ -155,40 +156,24 @@ type clusterMetrics struct {
 	TotalCpuTimeSecs float64 `json:"totalCpuTimeSecs"`
 }
 
-func (cm clusterMetrics) collect(host string, port string) {
+func (cm ClusterMetrics) collect(host string, port string) (ClusterMetrics, error) {
 	resp, err := http.Get("http://" + host + ":" + port + "/v1/cluster")
 	if err != nil {
 		log.Errorf("%s", err)
-		return
+		return ClusterMetrics{}, err
 	}
 	if resp.StatusCode != 200 {
 		log.Errorf("%s", err)
-		return
+		return ClusterMetrics{}, err
 	}
 	defer resp.Body.Close()
 
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
 		log.Errorf("%s", err)
-		return
+		return ClusterMetrics{}, err
 	}
 
 	_ = json.Unmarshal(body, &cm)
-}
-
-func main() {
-	args := os.Args
-
-	w := workers{}
-	w.collect(args[1], args[2])
-	for k, _ := range w {
-		wm := workerMetrics{}
-		wm.collect(args[1], args[2], strings.Split(k, " ")[0])
-	}
-
-	cq := clusterQueries{}
-	cq.collect(args[1], args[2])
-
-	cm := clusterMetrics{}
-	cm.collect(args[1], args[2])
+	return cm, err
 }
