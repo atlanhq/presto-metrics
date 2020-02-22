@@ -36,7 +36,7 @@ func (w workers) collect(host string, port string) (workers, error) {
 }
 
 type workerMetrics struct {
-	Processors      string  `json:"processors"`
+	Processors      int64   `json:"processors"`
 	HeapAvailable   int64   `json:"heapAvailable"`
 	HeapUsed        int64   `json:"heapUsed"`
 	NonHeapUsed     int64   `json:"nonHeapUsed"`
