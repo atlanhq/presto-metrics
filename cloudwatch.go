@@ -77,6 +77,15 @@ type ClusterMemoryMetrics struct {
 	MeanWorkerGeneralFreePoolMemory    float64
 }
 
+type ClusterCPUMetrics struct {
+	ClusterUserCPUUtilisation        float64
+	ClusterSystemCPUUtilisation      float64
+	MedianWorkerUserCPUUtilisation   float64
+	MedianWorkerSystemCPUUtilisation float64
+	MeanWorkerUserCPUUtilisation     float64
+	MeanWorkerSystemCPUUtilisation   float64
+}
+
 func (c *CloudWatch) PutWorkerMetricData(host string, port string, namespace string, stackName string) error {
 	svc := cloudwatch.New(session.Must(session.NewSession()),
 		aws.NewConfig().WithRegion("ap-south-1"))
@@ -92,6 +101,9 @@ func (c *CloudWatch) PutWorkerMetricData(host string, port string, namespace str
 	var clusterGeneralPoolReservedMemory []float64
 	var clusterGeneralPoolRevocableMemory []float64
 
+	var clusterUserCPUUtilisation []float64
+	var clusterSystemCPUUtilisation []float64
+
 	for k, _ := range workers {
 		wm := workerMetrics{}
 		workerId := strings.Split(k, " ")[0]
@@ -104,6 +116,9 @@ func (c *CloudWatch) PutWorkerMetricData(host string, port string, namespace str
 		clusterGeneralPoolTotalMemory = append(clusterGeneralPoolTotalMemory, float64(wm.MemoryInfo.Pools.General.MaxBytes))
 		clusterGeneralPoolReservedMemory = append(clusterGeneralPoolReservedMemory, float64(wm.MemoryInfo.Pools.General.ReservedBytes))
 		clusterGeneralPoolRevocableMemory = append(clusterGeneralPoolRevocableMemory, float64(wm.MemoryInfo.Pools.General.ReservedRevocableBytes))
+
+		clusterUserCPUUtilisation = append(clusterUserCPUUtilisation, wm.ProcessCpuLoad)
+		clusterSystemCPUUtilisation = append(clusterSystemCPUUtilisation, wm.SystemCpuLoad)
 
 		v := reflect.ValueOf(wm)
 		typeOfS := v.Type()
@@ -146,7 +161,7 @@ func (c *CloudWatch) PutWorkerMetricData(host string, port string, namespace str
 	// cluster memory metrics
 	metricInput = new(cloudwatch.PutMetricDataInput)
 	metricInput.SetNamespace(namespace)
-	var clusterMetricsData []*cloudwatch.MetricDatum
+	var clusterMemoryMetricsData []*cloudwatch.MetricDatum
 
 	clusterMemoryMetrics := ClusterMemoryMetrics{
 		Sum(clusterGeneralPoolFreeMemory),
@@ -169,9 +184,44 @@ func (c *CloudWatch) PutWorkerMetricData(host string, port string, namespace str
 		dimension.SetValue(stackName)
 		dimensions = append(dimensions, dimension)
 		metricData.SetDimensions(dimensions)
-		clusterMetricsData = append(clusterMetricsData, metricData)
+		clusterMemoryMetricsData = append(clusterMemoryMetricsData, metricData)
 	}
-	metricInput.SetMetricData(clusterMetricsData)
+	metricInput.SetMetricData(clusterMemoryMetricsData)
+	_, err = svc.PutMetricData(metricInput)
+	if err != nil {
+		_ = fmt.Errorf("%s", err)
+		return err
+	}
+
+	// cluster CPU metrics
+	metricInput = new(cloudwatch.PutMetricDataInput)
+	metricInput.SetNamespace(namespace)
+	var clusterCPUMetricsData []*cloudwatch.MetricDatum
+
+	clusterCPUMetrics := ClusterCPUMetrics{
+		ClusterUserCPUUtilisation:        Sum(clusterUserCPUUtilisation),
+		ClusterSystemCPUUtilisation:      Sum(clusterSystemCPUUtilisation),
+		MedianWorkerUserCPUUtilisation:   Median(clusterUserCPUUtilisation),
+		MedianWorkerSystemCPUUtilisation: Median(clusterSystemCPUUtilisation),
+		MeanWorkerUserCPUUtilisation:     Sum(clusterUserCPUUtilisation) / float64(len(workers)),
+		MeanWorkerSystemCPUUtilisation:   Sum(clusterSystemCPUUtilisation) / float64(len(workers)),
+	}
+	v = reflect.ValueOf(clusterCPUMetrics)
+	typeOfS = v.Type()
+	for i := 0; i < v.NumField(); i++ {
+		metricData := new(cloudwatch.MetricDatum)
+		metricData.SetMetricName(typeOfS.Field(i).Name)
+		metricData.SetValue(v.Field(i).Interface().(float64))
+		metricData.SetUnit("None")
+		var dimensions []*cloudwatch.Dimension
+		dimension := new(cloudwatch.Dimension)
+		dimension.SetName("prestoStackName")
+		dimension.SetValue(stackName)
+		dimensions = append(dimensions, dimension)
+		metricData.SetDimensions(dimensions)
+		clusterCPUMetricsData = append(clusterCPUMetricsData, metricData)
+	}
+	metricInput.SetMetricData(clusterCPUMetricsData)
 	_, err = svc.PutMetricData(metricInput)
 	if err != nil {
 		_ = fmt.Errorf("%s", err)
