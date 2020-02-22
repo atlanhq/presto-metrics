@@ -67,6 +67,82 @@ var (
 		stackNameVarLabel, nil,
 	)
 
+	// memory
+
+	clusterGeneralPoolFreeMemory = prometheus.NewDesc(
+		prometheus.BuildFQName(namespace, "", "cluster_general_pool_free_memory"),
+		"total free general pool memory of cluster.",
+		stackNameVarLabel, nil,
+	)
+
+	clusterGeneralPoolTotalMemory = prometheus.NewDesc(
+		prometheus.BuildFQName(namespace, "", "cluster_general_pool_total_memory"),
+		"total general pool memory of cluster.",
+		stackNameVarLabel, nil,
+	)
+
+	clusterGeneralPoolReservedMemory = prometheus.NewDesc(
+		prometheus.BuildFQName(namespace, "", "cluster_general_pool_reserved_memory"),
+		"total general pool reserved memory of cluster.",
+		stackNameVarLabel, nil,
+	)
+
+	clusterGeneralPoolRevocableMemory = prometheus.NewDesc(
+		prometheus.BuildFQName(namespace, "", "cluster_general_pool_revocable_memory"),
+		"total general pool revocable memory of cluster.",
+		stackNameVarLabel, nil,
+	)
+
+	medianWorkersGeneralPoolFreeMemory = prometheus.NewDesc(
+		prometheus.BuildFQName(namespace, "", "median_workers_general_pool_memory"),
+		"median workers general pool memory",
+		stackNameVarLabel, nil,
+	)
+
+	meanWorkerGeneralFreePoolMemory = prometheus.NewDesc(
+		prometheus.BuildFQName(namespace, "", "mean_workers_general_pool_memory"),
+		"mean workers general pool memory",
+		stackNameVarLabel, nil,
+	)
+
+	// cpu
+
+	clusterUserCPUUtilisation = prometheus.NewDesc(
+		prometheus.BuildFQName(namespace, "", "cluster_user_cpu_utilisation"),
+		"cluster user cpu utlisation",
+		stackNameVarLabel, nil,
+	)
+
+	clusterSystemCPUUtilisation = prometheus.NewDesc(
+		prometheus.BuildFQName(namespace, "", "cluster_system_cpu_utilisation"),
+		"cluster system cpu utlisation",
+		stackNameVarLabel, nil,
+	)
+
+	medianWorkerUserCPUUtilisation = prometheus.NewDesc(
+		prometheus.BuildFQName(namespace, "", "median_workers_user_cpu_utilisation"),
+		"median workers user cpu utlisation",
+		stackNameVarLabel, nil,
+	)
+
+	medianWorkerSystemCPUUtilisation = prometheus.NewDesc(
+		prometheus.BuildFQName(namespace, "", "median_workers_system_cpu_utilisation"),
+		"median workers system cpu utlisation",
+		stackNameVarLabel, nil,
+	)
+
+	meanWorkerUserCPUUtilisation = prometheus.NewDesc(
+		prometheus.BuildFQName(namespace, "", "mean_workers_user_cpu_utilisation"),
+		"mean workers user cpu utlisation",
+		stackNameVarLabel, nil,
+	)
+
+	meanWorkerSystemCPUUtilisation = prometheus.NewDesc(
+		prometheus.BuildFQName(namespace, "", "mean_workers_system_cpu_utilisation"),
+		"mean workers system cpu utlisation",
+		stackNameVarLabel, nil,
+	)
+
 	// worker level metrics
 	processors = prometheus.NewDesc(
 		prometheus.BuildFQName(workerNamespace, "", "processors"),
@@ -141,8 +217,10 @@ func (e *clusterMetrics) Describe(chan<- *prometheus.Desc) {
 }
 
 type workersMetrics struct {
-	config        Config
-	workerMetrics workerMetrics
+	config               Config
+	workerMetrics        workerMetrics
+	ClusterMemoryMetrics ClusterMemoryMetrics
+	ClusterCPUMetrics    ClusterCPUMetrics
 }
 
 func (e *clusterMetrics) Collect(ch chan<- prometheus.Metric) {
@@ -167,6 +245,14 @@ func (e *workersMetrics) Collect(ch chan<- prometheus.Metric) {
 	// worker level metrics
 	workers := workers{}
 	workers, _ = workers.collect(e.config.host, e.config.port)
+
+	var clusterGeneralPoolTotalMemoryArray []float64
+	var clusterGeneralPoolFreeMemoryArray []float64
+	var clusterGeneralPoolReservedMemoryArray []float64
+	var clusterGeneralPoolRevocableMemoryArray []float64
+	var clusterUserCPUUtilisationArray []float64
+	var clusterSystemCPUUtilisationArray []float64
+
 	for k, _ := range workers {
 		wm := workerMetrics{}
 		workerId := strings.Split(k, " ")[0]
@@ -175,6 +261,14 @@ func (e *workersMetrics) Collect(ch chan<- prometheus.Metric) {
 			fmt.Println(err)
 			return
 		}
+
+		clusterGeneralPoolFreeMemoryArray = append(clusterGeneralPoolFreeMemoryArray, float64(wm.MemoryInfo.Pools.General.FreeBytes))
+		clusterGeneralPoolTotalMemoryArray = append(clusterGeneralPoolTotalMemoryArray, float64(wm.MemoryInfo.Pools.General.MaxBytes))
+		clusterGeneralPoolReservedMemoryArray = append(clusterGeneralPoolReservedMemoryArray, float64(wm.MemoryInfo.Pools.General.ReservedBytes))
+		clusterGeneralPoolRevocableMemoryArray = append(clusterGeneralPoolRevocableMemoryArray, float64(wm.MemoryInfo.Pools.General.ReservedRevocableBytes))
+		clusterUserCPUUtilisationArray = append(clusterUserCPUUtilisationArray, wm.ProcessCpuLoad)
+		clusterSystemCPUUtilisationArray = append(clusterSystemCPUUtilisationArray, wm.SystemCpuLoad)
+
 		ch <- prometheus.MustNewConstMetric(processors, prometheus.GaugeValue, float64(wm.Processors), e.config.stackName, workerId)
 		ch <- prometheus.MustNewConstMetric(heapAvailable, prometheus.GaugeValue, float64(wm.HeapAvailable), e.config.stackName, workerId)
 		ch <- prometheus.MustNewConstMetric(heapUsed, prometheus.GaugeValue, float64(wm.HeapUsed), e.config.stackName, workerId)
@@ -187,6 +281,37 @@ func (e *workersMetrics) Collect(ch chan<- prometheus.Metric) {
 		ch <- prometheus.MustNewConstMetric(generalPoolReservedRevocableBytes, prometheus.GaugeValue, float64(wm.MemoryInfo.Pools.General.ReservedRevocableBytes), e.config.stackName, workerId)
 		ch <- prometheus.MustNewConstMetric(totalNodeMemory, prometheus.GaugeValue, float64(wm.TotalNodeMemory), e.config.stackName, workerId)
 	}
+
+	e.ClusterMemoryMetrics = ClusterMemoryMetrics{
+		Sum(clusterGeneralPoolFreeMemoryArray),
+		Sum(clusterGeneralPoolTotalMemoryArray),
+		Sum(clusterGeneralPoolReservedMemoryArray),
+		Sum(clusterGeneralPoolRevocableMemoryArray),
+		Median(clusterGeneralPoolFreeMemoryArray),
+		Sum(clusterGeneralPoolFreeMemoryArray) / float64(len(workers)),
+	}
+	e.ClusterCPUMetrics = ClusterCPUMetrics{
+		ClusterUserCPUUtilisation:        Sum(clusterUserCPUUtilisationArray),
+		ClusterSystemCPUUtilisation:      Sum(clusterSystemCPUUtilisationArray),
+		MedianWorkerUserCPUUtilisation:   Median(clusterUserCPUUtilisationArray),
+		MedianWorkerSystemCPUUtilisation: Median(clusterSystemCPUUtilisationArray),
+		MeanWorkerUserCPUUtilisation:     Sum(clusterUserCPUUtilisationArray) / float64(len(workers)),
+		MeanWorkerSystemCPUUtilisation:   Sum(clusterSystemCPUUtilisationArray) / float64(len(workers)),
+	}
+
+	ch <- prometheus.MustNewConstMetric(clusterGeneralPoolFreeMemory, prometheus.GaugeValue, e.ClusterMemoryMetrics.ClusterGeneralPoolFreeMemory, e.config.stackName)
+	ch <- prometheus.MustNewConstMetric(clusterGeneralPoolTotalMemory, prometheus.GaugeValue, e.ClusterMemoryMetrics.ClusterGeneralPoolTotalMemory, e.config.stackName)
+	ch <- prometheus.MustNewConstMetric(clusterGeneralPoolReservedMemory, prometheus.GaugeValue, e.ClusterMemoryMetrics.ClusterGeneralPoolReservedMemory, e.config.stackName)
+	ch <- prometheus.MustNewConstMetric(clusterGeneralPoolRevocableMemory, prometheus.GaugeValue, e.ClusterMemoryMetrics.ClusterGeneralPoolRevocableMemory, e.config.stackName)
+	ch <- prometheus.MustNewConstMetric(medianWorkersGeneralPoolFreeMemory, prometheus.GaugeValue, e.ClusterMemoryMetrics.MedianWorkersGeneralPoolFreeMemory, e.config.stackName)
+	ch <- prometheus.MustNewConstMetric(meanWorkerGeneralFreePoolMemory, prometheus.GaugeValue, e.ClusterMemoryMetrics.MeanWorkerGeneralFreePoolMemory, e.config.stackName)
+	ch <- prometheus.MustNewConstMetric(clusterUserCPUUtilisation, prometheus.GaugeValue, e.ClusterCPUMetrics.ClusterUserCPUUtilisation, e.config.stackName)
+	ch <- prometheus.MustNewConstMetric(clusterSystemCPUUtilisation, prometheus.GaugeValue, e.ClusterCPUMetrics.ClusterSystemCPUUtilisation, e.config.stackName)
+	ch <- prometheus.MustNewConstMetric(medianWorkerUserCPUUtilisation, prometheus.GaugeValue, e.ClusterCPUMetrics.MedianWorkerUserCPUUtilisation, e.config.stackName)
+	ch <- prometheus.MustNewConstMetric(medianWorkerSystemCPUUtilisation, prometheus.GaugeValue, e.ClusterCPUMetrics.MedianWorkerSystemCPUUtilisation, e.config.stackName)
+	ch <- prometheus.MustNewConstMetric(meanWorkerUserCPUUtilisation, prometheus.GaugeValue, e.ClusterCPUMetrics.MeanWorkerUserCPUUtilisation, e.config.stackName)
+	ch <- prometheus.MustNewConstMetric(meanWorkerSystemCPUUtilisation, prometheus.GaugeValue, e.ClusterCPUMetrics.MeanWorkerSystemCPUUtilisation, e.config.stackName)
+
 }
 
 func prometheusExporterStart(host string, port string, stackName string, listenAddress string) {

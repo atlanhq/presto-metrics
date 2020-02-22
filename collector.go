@@ -13,6 +13,24 @@ type worker struct {
 
 type workers map[string]worker
 
+type ClusterMemoryMetrics struct {
+	ClusterGeneralPoolFreeMemory       float64
+	ClusterGeneralPoolTotalMemory      float64
+	ClusterGeneralPoolReservedMemory   float64
+	ClusterGeneralPoolRevocableMemory  float64
+	MedianWorkersGeneralPoolFreeMemory float64
+	MeanWorkerGeneralFreePoolMemory    float64
+}
+
+type ClusterCPUMetrics struct {
+	ClusterUserCPUUtilisation        float64
+	ClusterSystemCPUUtilisation      float64
+	MedianWorkerUserCPUUtilisation   float64
+	MedianWorkerSystemCPUUtilisation float64
+	MeanWorkerUserCPUUtilisation     float64
+	MeanWorkerSystemCPUUtilisation   float64
+}
+
 func (w workers) collect(host string, port string) (workers, error) {
 	resp, err := http.Get("http://" + host + ":" + port + "/v1/cluster/workerMemory")
 	if err != nil {

@@ -68,24 +68,6 @@ func (c *CloudWatch) PutClusterMetricData(host string, port string, namespace st
 	return nil
 }
 
-type ClusterMemoryMetrics struct {
-	ClusterGeneralPoolFreeMemory       float64
-	ClusterGeneralPoolTotalMemory      float64
-	ClusterGeneralPoolReservedMemory   float64
-	ClusterGeneralPoolRevocableMemory  float64
-	MedianWorkersGeneralPoolFreeMemory float64
-	MeanWorkerGeneralFreePoolMemory    float64
-}
-
-type ClusterCPUMetrics struct {
-	ClusterUserCPUUtilisation        float64
-	ClusterSystemCPUUtilisation      float64
-	MedianWorkerUserCPUUtilisation   float64
-	MedianWorkerSystemCPUUtilisation float64
-	MeanWorkerUserCPUUtilisation     float64
-	MeanWorkerSystemCPUUtilisation   float64
-}
-
 func (c *CloudWatch) PutWorkerMetricData(host string, port string, namespace string, stackName string) error {
 	svc := cloudwatch.New(session.Must(session.NewSession()),
 		aws.NewConfig().WithRegion("ap-south-1"))
