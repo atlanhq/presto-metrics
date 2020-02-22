@@ -10,8 +10,7 @@ import (
 
 func main() {
 	var (
-		listenAddress = kingpin.Flag("web.listen-address", "Address on which to expose metrics and web interface.").Default(":9483").String()
-		//metricsPath   = kingpin.Flag("web.telemetry-path", "Path under which to expose metrics.").Default("/metrics").String()
+		listenAddress       = kingpin.Flag("web.listen-address", "Address on which to expose metrics and web interface.").Default(":9483").String()
 		serviceName         = kingpin.Flag("web.service-name", "service name to run cloudwatch/prometheus").Enum("cloudwatch", "prometheus")
 		prestoHost          = kingpin.Flag("web.presto-host", "presto host").Default("localhost").String()
 		prestoPort          = kingpin.Flag("web.presto-port", "presto port").Default("8080").String()
@@ -29,7 +28,7 @@ func main() {
 		}
 	} else {
 		if *serviceName == "prometheus" {
-			prometheusExporterStart(*listenAddress)
+			prometheusExporterStart(*prestoHost, *prestoPort, *stackName, *listenAddress)
 		}
 	}
 }
