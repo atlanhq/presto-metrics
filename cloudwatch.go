@@ -6,26 +6,9 @@ import (
 	"github.com/aws/aws-sdk-go/aws/client"
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/cloudwatch"
-	"github.com/montanaflynn/stats"
 	"reflect"
 	"strings"
 )
-
-func Sum(data stats.Float64Data) float64 {
-	sum, err := stats.Sum(data)
-	if err != nil {
-		fmt.Println("Error ", err)
-	}
-	return sum
-}
-
-func Median(data stats.Float64Data) float64 {
-	median, err := stats.Median(data)
-	if err != nil {
-		fmt.Println("Error: ", err)
-	}
-	return median
-}
 
 type CloudWatch struct {
 	*client.Client
