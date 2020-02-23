@@ -118,24 +118,34 @@ type clusterQuery struct {
 	Query      string `json:"query"`
 	QueryId    string `json:"queryId"`
 	QueryStats struct {
-		CompletedDrivers           int64   `json:"completedDrivers"`
-		CreateTime                 string  `json:"createTime"`
-		CumulativeUserMemory       float64 `json:"cumulativeUserMemory"`
-		ElapsedTime                string  `json:"elapsedTime"`
-		ExecutionTime              string  `json:"executionTime"`
-		FullyBlocked               bool    `json:"fullyBlocked"`
-		PeakTotalMemoryReservation string  `json:"peakTotalMemoryReservation"`
-		PeakUserMemoryReservation  string  `json:"peakUserMemoryReservation"`
-		QueuedDrivers              int64   `json:"queuedDrivers"`
-		QueuedTime                 string  `json:"queuedTime"`
-		RawInputDataSize           string  `json:"rawInputDataSize"`
-		RawInputPositions          string  `json:"rawInputPositions"`
-		RunningDrivers             int64   `json:"runningDrivers"`
-		TotalCpuTime               string  `json:"totalCpuTime"`
-		TotalDrivers               int64   `json:"totalDrivers"`
-		TotalMemoryReservation     string  `json:"totalMemoryReservation"`
-		TotalScheduledTime         string  `json:"totalScheduledTime"`
-		UserMemoryReservation      string  `json:"userMemoryReservation"`
+		CompletedDrivers                 int64   `json:"completedDrivers"`
+		CreateTime                       string  `json:"createTime"`
+		CumulativeUserMemory             float64 `json:"cumulativeUserMemory"`
+		ElapsedTime                      string  `json:"elapsedTime"`
+		ElapsedTimeParsed                float64
+		ExecutionTime                    string `json:"executionTime"`
+		ExecutionTimeParsed              float64
+		FullyBlocked                     bool   `json:"fullyBlocked"`
+		PeakTotalMemoryReservation       string `json:"peakTotalMemoryReservation"`
+		PeakTotalMemoryReservationParsed float64
+		PeakUserMemoryReservation        string `json:"peakUserMemoryReservation"`
+		PeakUserMemoryReservationParsed  float64
+		QueuedDrivers                    int64  `json:"queuedDrivers"`
+		QueuedTime                       string `json:"queuedTime"`
+		QueuedTimeParsed                 float64
+		RawInputDataSize                 string `json:"rawInputDataSize"`
+		RawInputDataSizeParsed           float64
+		RawInputPositions                string `json:"rawInputPositions"`
+		RunningDrivers                   int64  `json:"runningDrivers"`
+		TotalCpuTime                     string `json:"totalCpuTime"`
+		TotalCpuTimeParsed               float64
+		TotalDrivers                     int64  `json:"totalDrivers"`
+		TotalMemoryReservation           string `json:"totalMemoryReservation"`
+		TotalMemoryReservationParsed     float64
+		TotalScheduledTime               string `json:"totalScheduledTime"`
+		TotalScheduledTimeParsed         float64
+		UserMemoryReservation            string `json:"userMemoryReservation"`
+		UserMemoryReservationParsed      float64
 	} `json:"queryStats"`
 	State string `json:"state"`
 }
@@ -161,7 +171,22 @@ func (cq clusterQueries) collect(host string, port string) (clusterQueries, erro
 	}
 
 	_ = json.Unmarshal(body, &cq)
-	return cq, nil
+	cqq := cq
+	for index, query := range cq {
+		queryStats := query.QueryStats
+		queryStats.ElapsedTimeParsed, err = fromHumanDuration(queryStats.ElapsedTime)
+		queryStats.ExecutionTimeParsed, _ = fromHumanDuration(queryStats.ExecutionTime)
+		queryStats.PeakTotalMemoryReservationParsed, _ = fromHumanSize(queryStats.PeakTotalMemoryReservation)
+		queryStats.PeakUserMemoryReservationParsed, _ = fromHumanSize(queryStats.PeakUserMemoryReservation)
+		queryStats.QueuedTimeParsed, _ = fromHumanDuration(queryStats.QueuedTime)
+		queryStats.RawInputDataSizeParsed, _ = fromHumanSize(queryStats.RawInputDataSize)
+		queryStats.TotalCpuTimeParsed, _ = fromHumanDuration(queryStats.TotalCpuTime)
+		queryStats.TotalMemoryReservationParsed, _ = fromHumanSize(queryStats.TotalMemoryReservation)
+		queryStats.TotalScheduledTimeParsed, _ = fromHumanDuration(queryStats.TotalScheduledTime)
+		queryStats.UserMemoryReservationParsed, _ = fromHumanSize(queryStats.UserMemoryReservation)
+		cqq[index].QueryStats = queryStats
+	}
+	return cqq, nil
 }
 
 type ClusterMetrics struct {

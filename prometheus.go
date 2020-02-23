@@ -12,11 +12,13 @@ import (
 const (
 	namespace       = "atlan_presto"
 	workerNamespace = namespace + "_worker"
+	queryNamespace  = namespace + "_query"
 )
 
 var (
 	stackNameVarLabel = []string{"prestoStackName"}
 	workersVarLabel   = []string{"prestoStackName", "prestoWorkerId"}
+	queryVarLabel     = []string{"prestoStackName", "queryId"}
 )
 
 var (
@@ -199,6 +201,103 @@ var (
 		"total node memory",
 		workersVarLabel, nil,
 	)
+
+	// query level metrics
+
+	completedDrivers = prometheus.NewDesc(
+		prometheus.BuildFQName(queryNamespace, "", "completed_drivers"),
+		"completed drivers",
+		queryVarLabel, nil,
+	)
+
+	cumulativeUserMemory = prometheus.NewDesc(
+		prometheus.BuildFQName(queryNamespace, "", "cumulative_user_memory"),
+		"cumulative user memory",
+		queryVarLabel, nil,
+	)
+
+	elapsedTime = prometheus.NewDesc(
+		prometheus.BuildFQName(queryNamespace, "", "elapsed_time"),
+		"elapsed time",
+		queryVarLabel, nil,
+	)
+
+	executionTime = prometheus.NewDesc(
+		prometheus.BuildFQName(queryNamespace, "", "execution_time"),
+		"execution time",
+		queryVarLabel, nil,
+	)
+	peakTotalMemoryReservation = prometheus.NewDesc(
+		prometheus.BuildFQName(queryNamespace, "", "peak_total_memory_reservation"),
+		"peak total memory reservation",
+		queryVarLabel, nil,
+	)
+
+	peakUserMemoryReservation = prometheus.NewDesc(
+		prometheus.BuildFQName(queryNamespace, "", "peak_user_memory_reservation"),
+		"peak user memory reservation",
+		queryVarLabel, nil,
+	)
+
+	queuedDrivers = prometheus.NewDesc(
+		prometheus.BuildFQName(queryNamespace, "", "queued_drivers"),
+		"queued drivers",
+		queryVarLabel, nil,
+	)
+
+	queuedTime = prometheus.NewDesc(
+		prometheus.BuildFQName(queryNamespace, "", "queued_time"),
+		"queued time",
+		queryVarLabel, nil,
+	)
+
+	rawInputDataSize = prometheus.NewDesc(
+		prometheus.BuildFQName(queryNamespace, "", "raw_input_data_size"),
+		"raw input data size",
+		queryVarLabel, nil,
+	)
+
+	runningDriversCount = prometheus.NewDesc(
+		prometheus.BuildFQName(queryNamespace, "", "running_drivers"),
+		"running drivers",
+		queryVarLabel, nil,
+	)
+
+	totalCpuTime = prometheus.NewDesc(
+		prometheus.BuildFQName(queryNamespace, "", "total_cpu_time"),
+		"total cpu time",
+		queryVarLabel, nil,
+	)
+
+	totalDrivers = prometheus.NewDesc(
+		prometheus.BuildFQName(queryNamespace, "", "total_drivers"),
+		"total drivers",
+		queryVarLabel, nil,
+	)
+
+	totalMemoryReservation = prometheus.NewDesc(
+		prometheus.BuildFQName(queryNamespace, "", "total_memory_reservation"),
+		"total memory reservation",
+		queryVarLabel, nil,
+	)
+
+	totalScheduledTime = prometheus.NewDesc(
+		prometheus.BuildFQName(queryNamespace, "", "total_scheduled_time"),
+		"total scheduled time",
+		queryVarLabel, nil,
+	)
+
+	userMemoryReservation = prometheus.NewDesc(
+		prometheus.BuildFQName(queryNamespace, "", "user_memory_reservation"),
+		"total user memory reservation",
+		queryVarLabel, nil,
+	)
+
+	fullyBlocked = prometheus.NewDesc(
+		prometheus.BuildFQName(queryNamespace, "", "fully_blocked"),
+		"full blocked",
+		queryVarLabel, nil,
+	)
 )
 
 type Config struct {
@@ -216,13 +315,6 @@ func (e *clusterMetrics) Describe(chan<- *prometheus.Desc) {
 
 }
 
-type workersMetrics struct {
-	config               Config
-	workerMetrics        workerMetrics
-	ClusterMemoryMetrics ClusterMemoryMetrics
-	ClusterCPUMetrics    ClusterCPUMetrics
-}
-
 func (e *clusterMetrics) Collect(ch chan<- prometheus.Metric) {
 	// cluster level metrics
 	e.ClusterMetrics, _ = ClusterMetrics{}.collect(e.config.host, e.config.port)
@@ -235,6 +327,13 @@ func (e *clusterMetrics) Collect(ch chan<- prometheus.Metric) {
 	ch <- prometheus.MustNewConstMetric(totalInputRows, prometheus.GaugeValue, e.ClusterMetrics.TotalInputRows, e.config.stackName)
 	ch <- prometheus.MustNewConstMetric(totalInputBytes, prometheus.GaugeValue, e.ClusterMetrics.TotalInputBytes, e.config.stackName)
 	ch <- prometheus.MustNewConstMetric(totalCpuTimeSecs, prometheus.GaugeValue, e.ClusterMetrics.TotalCpuTimeSecs, e.config.stackName)
+}
+
+type workersMetrics struct {
+	config               Config
+	workerMetrics        workerMetrics
+	ClusterMemoryMetrics ClusterMemoryMetrics
+	ClusterCPUMetrics    ClusterCPUMetrics
 }
 
 func (e *workersMetrics) Describe(chan<- *prometheus.Desc) {
@@ -253,7 +352,7 @@ func (e *workersMetrics) Collect(ch chan<- prometheus.Metric) {
 	var clusterUserCPUUtilisationArray []float64
 	var clusterSystemCPUUtilisationArray []float64
 
-	for k, _ := range workers {
+	for k := range workers {
 		wm := workerMetrics{}
 		workerId := strings.Split(k, " ")[0]
 		wm, err := wm.collect(e.config.host, e.config.port, workerId)
@@ -314,6 +413,38 @@ func (e *workersMetrics) Collect(ch chan<- prometheus.Metric) {
 
 }
 
+type queryMetrics struct {
+	config         Config
+	clusterQueries clusterQueries
+}
+
+func (e *queryMetrics) Describe(chan<- *prometheus.Desc) {
+
+}
+
+func (e *queryMetrics) Collect(ch chan<- prometheus.Metric) {
+	e.clusterQueries, _ = clusterQueries{}.collect(e.config.host, e.config.port)
+	for _, query := range e.clusterQueries {
+		queryStats := query.QueryStats
+		ch <- prometheus.MustNewConstMetric(completedDrivers, prometheus.GaugeValue, float64(queryStats.CompletedDrivers), e.config.stackName, query.QueryId)
+		ch <- prometheus.MustNewConstMetric(cumulativeUserMemory, prometheus.GaugeValue, queryStats.CumulativeUserMemory, e.config.stackName, query.QueryId)
+		ch <- prometheus.MustNewConstMetric(elapsedTime, prometheus.GaugeValue, queryStats.ElapsedTimeParsed, e.config.stackName, query.QueryId)
+		ch <- prometheus.MustNewConstMetric(executionTime, prometheus.GaugeValue, queryStats.ExecutionTimeParsed, e.config.stackName, query.QueryId)
+		ch <- prometheus.MustNewConstMetric(peakTotalMemoryReservation, prometheus.GaugeValue, queryStats.PeakTotalMemoryReservationParsed, e.config.stackName, query.QueryId)
+		ch <- prometheus.MustNewConstMetric(peakUserMemoryReservation, prometheus.GaugeValue, queryStats.PeakUserMemoryReservationParsed, e.config.stackName, query.QueryId)
+		ch <- prometheus.MustNewConstMetric(queuedDrivers, prometheus.GaugeValue, float64(queryStats.QueuedDrivers), e.config.stackName, query.QueryId)
+		ch <- prometheus.MustNewConstMetric(queuedTime, prometheus.GaugeValue, queryStats.QueuedTimeParsed, e.config.stackName, query.QueryId)
+		ch <- prometheus.MustNewConstMetric(rawInputDataSize, prometheus.GaugeValue, queryStats.RawInputDataSizeParsed, e.config.stackName, query.QueryId)
+		ch <- prometheus.MustNewConstMetric(runningDriversCount, prometheus.GaugeValue, float64(queryStats.RunningDrivers), e.config.stackName, query.QueryId)
+		ch <- prometheus.MustNewConstMetric(totalCpuTime, prometheus.GaugeValue, queryStats.TotalCpuTimeParsed, e.config.stackName, query.QueryId)
+		ch <- prometheus.MustNewConstMetric(totalDrivers, prometheus.GaugeValue, float64(queryStats.TotalDrivers), e.config.stackName, query.QueryId)
+		ch <- prometheus.MustNewConstMetric(totalMemoryReservation, prometheus.GaugeValue, queryStats.TotalMemoryReservationParsed, e.config.stackName, query.QueryId)
+		ch <- prometheus.MustNewConstMetric(totalScheduledTime, prometheus.GaugeValue, queryStats.TotalScheduledTimeParsed, e.config.stackName, query.QueryId)
+		ch <- prometheus.MustNewConstMetric(userMemoryReservation, prometheus.GaugeValue, queryStats.UserMemoryReservationParsed, e.config.stackName, query.QueryId)
+		ch <- prometheus.MustNewConstMetric(fullyBlocked, prometheus.GaugeValue, float64(boolToInt(queryStats.FullyBlocked)), e.config.stackName, query.QueryId)
+	}
+}
+
 func prometheusExporterStart(host string, port string, stackName string, listenAddress string) {
 	http.Handle("/metrics", promhttp.Handler())
 	log.Info("Listening on ", listenAddress)
@@ -326,8 +457,10 @@ func prometheusExporterStart(host string, port string, stackName string, listenA
 		config: config,
 	})
 	prometheus.MustRegister(&workersMetrics{
-		config:        config,
-		workerMetrics: workerMetrics{},
+		config: config,
+	})
+	prometheus.MustRegister(&queryMetrics{
+		config: config,
 	})
 	log.Fatal(http.ListenAndServe(listenAddress, nil))
 }

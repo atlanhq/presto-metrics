@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"github.com/docker/go-units"
 	"github.com/montanaflynn/stats"
 	"regexp"
 	"strconv"
@@ -46,4 +47,17 @@ func fromHumanDuration(data string) (float64, error) {
 	unit := durationRegex.FindString(data)
 	durationVal, err := strconv.ParseFloat(data[0:len(data)-1], 64)
 	return durationVal * durationMap[unit], err
+}
+
+func fromHumanSize(data string) (float64, error) {
+	machineReadableSize, err := units.FromHumanSize(data)
+	return float64(machineReadableSize), err
+}
+
+func boolToInt(data bool) int64 {
+	if data {
+		return 1
+	} else {
+		return 0
+	}
 }
