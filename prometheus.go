@@ -6,7 +6,6 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/prometheus/common/log"
 	"net/http"
-	"strings"
 )
 
 const (
@@ -300,12 +299,6 @@ var (
 	)
 )
 
-type Config struct {
-	host      string
-	port      string
-	stackName string
-}
-
 type clusterMetrics struct {
 	config         Config
 	ClusterMetrics ClusterMetrics
@@ -317,7 +310,7 @@ func (e *clusterMetrics) Describe(chan<- *prometheus.Desc) {
 
 func (e *clusterMetrics) Collect(ch chan<- prometheus.Metric) {
 	// cluster level metrics
-	e.ClusterMetrics, _ = ClusterMetrics{}.collect(e.config.host, e.config.port)
+	e.ClusterMetrics, _ = ClusterMetrics{}.collect(e.config.host, e.config.port, e.config.apiPrefix)
 	ch <- prometheus.MustNewConstMetric(runningQueries, prometheus.GaugeValue, e.ClusterMetrics.RunningQueries, e.config.stackName)
 	ch <- prometheus.MustNewConstMetric(blockedQueries, prometheus.GaugeValue, e.ClusterMetrics.BlockedQueries, e.config.stackName)
 	ch <- prometheus.MustNewConstMetric(queuedQueries, prometheus.GaugeValue, e.ClusterMetrics.QueuedQueries, e.config.stackName)
@@ -354,8 +347,8 @@ func (e *workersMetrics) Collect(ch chan<- prometheus.Metric) {
 
 	for k := range workers {
 		wm := workerMetrics{}
-		workerId := strings.Split(k, " ")[0]
-		wm, err := wm.collect(e.config.host, e.config.port, workerId)
+		workerId := k
+		wm, err := wm.collect(e.config.host, e.config.port, workerId, e.config.apiPrefix)
 		if err != nil {
 			fmt.Println(err)
 			return
@@ -423,7 +416,7 @@ func (e *queryMetrics) Describe(chan<- *prometheus.Desc) {
 }
 
 func (e *queryMetrics) Collect(ch chan<- prometheus.Metric) {
-	e.clusterQueries, _ = clusterQueries{}.collect(e.config.host, e.config.port)
+	e.clusterQueries, _ = clusterQueries{}.collect(e.config.host, e.config.port, e.config.apiPrefix)
 	for _, query := range e.clusterQueries {
 		queryStats := query.QueryStats
 		ch <- prometheus.MustNewConstMetric(completedDrivers, prometheus.GaugeValue, float64(queryStats.CompletedDrivers), e.config.stackName, query.QueryId)
@@ -445,13 +438,14 @@ func (e *queryMetrics) Collect(ch chan<- prometheus.Metric) {
 	}
 }
 
-func prometheusExporterStart(host string, port string, stackName string, listenAddress string) {
+func prometheusExporterStart(host string, port string, stackName string, listenAddress string, apiPrefix string) {
 	http.Handle("/metrics", promhttp.Handler())
 	log.Info("Listening on ", listenAddress)
 	config := Config{
 		host:      host,
 		port:      port,
 		stackName: stackName,
+		apiPrefix: apiPrefix,
 	}
 	prometheus.MustRegister(&clusterMetrics{
 		config: config,

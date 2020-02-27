@@ -1,14 +1,22 @@
 package main
 
 import (
+	"database/sql"
 	"encoding/json"
+	"fmt"
+	_ "github.com/prestodb/presto-go-client/presto"
 	"github.com/prometheus/common/log"
 	"io/ioutil"
 	"net/http"
+	"strings"
 )
 
 type worker struct {
-	AvailableProcessors string `json:"availableProcessors"`
+	NodeId        string
+	HttpUri       string
+	NodeVersion   string
+	IsCoordinator string
+	State         string
 }
 
 type workers map[string]worker
@@ -32,24 +40,24 @@ type ClusterCPUMetrics struct {
 }
 
 func (w workers) collect(host string, port string) (workers, error) {
-	resp, err := http.Get("http://" + host + ":" + port + "/v1/cluster/workerMemory")
+	db, err := sql.Open("presto",
+		fmt.Sprintf("http://presto_metrics@%s:%s?catalog=system&schema=runtime", host, port))
 	if err != nil {
-		log.Errorf("%s", err)
-		return workers{}, err
+		return nil, err
 	}
-	if resp.StatusCode != 200 {
-		log.Errorf("%s", err)
-		return workers{}, err
-	}
-	defer resp.Body.Close()
-
-	body, err := ioutil.ReadAll(resp.Body)
+	data, err := db.Query("select * from nodes")
 	if err != nil {
-		log.Errorf("%s", err)
-		return workers{}, err
+		return nil, err
 	}
-
-	_ = json.Unmarshal(body, &w)
+	for data.Next() {
+		worker := worker{}
+		err := data.Scan(&worker.NodeId, &worker.HttpUri, &worker.NodeVersion, &worker.IsCoordinator, &worker.State)
+		if err != nil {
+			fmt.Println("Error ", err)
+			continue
+		}
+		w[worker.NodeId] = worker
+	}
 	return w, nil
 }
 
@@ -85,13 +93,14 @@ type workerMetrics struct {
 				ReservedBytes          int64 `json:"reservedBytes"`
 				ReservedRevocableBytes int64 `json:"reservedRevocableBytes"`
 			} `json:"reserved"`
+			TotalNodeMemory int64 `json:"totalNodeMemory"`
 		} `json:"pools"`
 	} `json:"memoryInfo"`
 	TotalNodeMemory int64 `json:"totalNodeMemory"`
 }
 
-func (wm workerMetrics) collect(host string, port string, nodeId string) (workerMetrics, error) {
-	resp, err := http.Get("http://" + host + ":" + port + "/v1/worker/" + nodeId + "/status")
+func (wm workerMetrics) collect(host string, port string, nodeId string, apiPrefix string) (workerMetrics, error) {
+	resp, err := http.Get("http://" + host + ":" + port + "/" + apiPrefix + "worker/" + nodeId + "/status")
 	if err != nil {
 		log.Errorf("%s", err)
 		return workerMetrics{}, err
@@ -99,6 +108,7 @@ func (wm workerMetrics) collect(host string, port string, nodeId string) (worker
 	if resp.StatusCode != 200 {
 		log.Errorf("%s", resp.StatusCode)
 		log.Errorf("%s", err)
+		log.Errorf(nodeId)
 		return workerMetrics{}, err
 	}
 	defer resp.Body.Close()
@@ -152,8 +162,8 @@ type clusterQuery struct {
 
 type clusterQueries []clusterQuery
 
-func (cq clusterQueries) collect(host string, port string) (clusterQueries, error) {
-	resp, err := http.Get("http://" + host + ":" + port + "/v1/query?state=RUNNING")
+func (cq clusterQueries) collect(host string, port string, apiPrefix string) (clusterQueries, error) {
+	resp, err := http.Get("http://" + host + ":" + port + "/" + apiPrefix + "query?state=RUNNING")
 	if err != nil {
 		log.Errorf("%s", err)
 		return clusterQueries{}, err
@@ -201,8 +211,14 @@ type ClusterMetrics struct {
 	TotalCpuTimeSecs float64 `json:"totalCpuTimeSecs"`
 }
 
-func (cm ClusterMetrics) collect(host string, port string) (ClusterMetrics, error) {
-	resp, err := http.Get("http://" + host + ":" + port + "/v1/cluster")
+func (cm ClusterMetrics) collect(host string, port string, apiPrefix string) (ClusterMetrics, error) {
+	var resp *http.Response
+	var err error
+	if strings.Contains(apiPrefix, "ui") {
+		resp, err = http.Get("http://" + host + ":" + port + "/" + apiPrefix + "stats")
+	} else {
+		resp, err = http.Get("http://" + host + ":" + port + "/" + apiPrefix + "cluster")
+	}
 	if err != nil {
 		log.Errorf("%s", err)
 		return ClusterMetrics{}, err

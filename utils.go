@@ -19,6 +19,14 @@ const (
 	week        = 7.0 * day
 )
 
+type Config struct {
+	host      string
+	port      string
+	stackName string
+	apiPrefix string
+	namespace string
+}
+
 type unitMap map[string]float64
 
 var (

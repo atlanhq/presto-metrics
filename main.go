@@ -16,6 +16,7 @@ func main() {
 		prestoPort          = kingpin.Flag("web.presto-port", "presto port").Default("8080").String()
 		stackName           = kingpin.Flag("web.stack-name", "presto stack name").Default("atlan-local-test-presto-stack").String()
 		cloudWatchNamespace = kingpin.Flag("web.cloudwatch-namespace", "cloudwatch namespace").Default("presto").String()
+		apiPrefix           = kingpin.Flag("web.api-prefix", "API prefix to use for making requests to presto").Default("v1/").String()
 	)
 	log.AddFlags(kingpin.CommandLine)
 	kingpin.Version(version.Print("presto_exporter"))
@@ -23,12 +24,12 @@ func main() {
 	kingpin.Parse()
 	if *serviceName == "cloudwatch" {
 		for {
-			cloudwatchAgentStart(*prestoHost, *prestoPort, *cloudWatchNamespace, *stackName)
+			cloudwatchAgentStart(*prestoHost, *prestoPort, *cloudWatchNamespace, *stackName, *apiPrefix)
 			time.Sleep(10 * time.Second)
 		}
 	} else {
 		if *serviceName == "prometheus" {
-			prometheusExporterStart(*prestoHost, *prestoPort, *stackName, *listenAddress)
+			prometheusExporterStart(*prestoHost, *prestoPort, *stackName, *listenAddress, *apiPrefix)
 		}
 	}
 }

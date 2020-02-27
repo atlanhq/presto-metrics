@@ -7,23 +7,22 @@ import (
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/cloudwatch"
 	"reflect"
-	"strings"
 )
 
 type CloudWatch struct {
 	*client.Client
 }
 
-func (c *CloudWatch) PutClusterMetricData(host string, port string, namespace string, stackName string) error {
+func (c *CloudWatch) PutClusterMetricData(config Config) error {
 	svc := cloudwatch.New(session.Must(session.NewSession()),
 		aws.NewConfig().WithRegion("ap-south-1"))
 
 	// cluster level metrics
 	metricInput := new(cloudwatch.PutMetricDataInput)
-	metricInput.SetNamespace(namespace)
+	metricInput.SetNamespace(config.namespace)
 	var metricsData []*cloudwatch.MetricDatum
 	cm := ClusterMetrics{}
-	cm, err := cm.collect(host, port)
+	cm, err := cm.collect(config.host, config.port, config.apiPrefix)
 
 	v := reflect.ValueOf(cm)
 	typeOfS := v.Type()
@@ -36,7 +35,7 @@ func (c *CloudWatch) PutClusterMetricData(host string, port string, namespace st
 		metricData.SetUnit("None")
 		dimension := new(cloudwatch.Dimension)
 		dimension.SetName("prestoStackName")
-		dimension.SetValue(stackName)
+		dimension.SetValue(config.stackName)
 		var dimensions []*cloudwatch.Dimension
 		dimensions = append(dimensions, dimension)
 		metricData.SetDimensions(dimensions)
@@ -51,16 +50,19 @@ func (c *CloudWatch) PutClusterMetricData(host string, port string, namespace st
 	return nil
 }
 
-func (c *CloudWatch) PutWorkerMetricData(host string, port string, namespace string, stackName string) error {
+func (c *CloudWatch) PutWorkerMetricData(config Config) error {
 	svc := cloudwatch.New(session.Must(session.NewSession()),
 		aws.NewConfig().WithRegion("ap-south-1"))
 
 	// worker level metrics
 	metricInput := new(cloudwatch.PutMetricDataInput)
-	metricInput.SetNamespace(namespace)
+	metricInput.SetNamespace(config.namespace)
 	var metricsData []*cloudwatch.MetricDatum
-	workers := workers{}
-	workers, _ = workers.collect(host, port)
+	workersList := workers{}
+	workersList, err := workersList.collect(config.host, config.port)
+	if err != nil {
+		fmt.Println(err)
+	}
 	var clusterGeneralPoolTotalMemory []float64
 	var clusterGeneralPoolFreeMemory []float64
 	var clusterGeneralPoolReservedMemory []float64
@@ -69,10 +71,10 @@ func (c *CloudWatch) PutWorkerMetricData(host string, port string, namespace str
 	var clusterUserCPUUtilisation []float64
 	var clusterSystemCPUUtilisation []float64
 
-	for k, _ := range workers {
+	for k, _ := range workersList {
 		wm := workerMetrics{}
-		workerId := strings.Split(k, " ")[0]
-		wm, err := wm.collect(host, port, workerId)
+		workerId := k
+		wm, err := wm.collect(config.host, config.port, workerId, config.apiPrefix)
 		if err != nil {
 			fmt.Println(err)
 			return err
@@ -105,7 +107,7 @@ func (c *CloudWatch) PutWorkerMetricData(host string, port string, namespace str
 			var dimensions []*cloudwatch.Dimension
 			dimension := new(cloudwatch.Dimension)
 			dimension.SetName("prestoStackName")
-			dimension.SetValue(stackName)
+			dimension.SetValue(config.stackName)
 			dimensions = append(dimensions, dimension)
 			dimension = new(cloudwatch.Dimension)
 			dimension.SetName("prestoWorkerId")
@@ -117,7 +119,7 @@ func (c *CloudWatch) PutWorkerMetricData(host string, port string, namespace str
 	}
 
 	metricInput.SetMetricData(metricsData)
-	_, err := svc.PutMetricData(metricInput)
+	_, err = svc.PutMetricData(metricInput)
 	if err != nil {
 		_ = fmt.Errorf("%s", err)
 		return err
@@ -125,7 +127,7 @@ func (c *CloudWatch) PutWorkerMetricData(host string, port string, namespace str
 
 	// cluster memory metrics
 	metricInput = new(cloudwatch.PutMetricDataInput)
-	metricInput.SetNamespace(namespace)
+	metricInput.SetNamespace(config.namespace)
 	var clusterMemoryMetricsData []*cloudwatch.MetricDatum
 
 	clusterMemoryMetrics := ClusterMemoryMetrics{
@@ -134,7 +136,7 @@ func (c *CloudWatch) PutWorkerMetricData(host string, port string, namespace str
 		Sum(clusterGeneralPoolReservedMemory),
 		Sum(clusterGeneralPoolRevocableMemory),
 		Median(clusterGeneralPoolFreeMemory),
-		Sum(clusterGeneralPoolFreeMemory) / float64(len(workers)),
+		Sum(clusterGeneralPoolFreeMemory) / float64(len(workersList)),
 	}
 	v := reflect.ValueOf(clusterMemoryMetrics)
 	typeOfS := v.Type()
@@ -146,7 +148,7 @@ func (c *CloudWatch) PutWorkerMetricData(host string, port string, namespace str
 		var dimensions []*cloudwatch.Dimension
 		dimension := new(cloudwatch.Dimension)
 		dimension.SetName("prestoStackName")
-		dimension.SetValue(stackName)
+		dimension.SetValue(config.stackName)
 		dimensions = append(dimensions, dimension)
 		metricData.SetDimensions(dimensions)
 		clusterMemoryMetricsData = append(clusterMemoryMetricsData, metricData)
@@ -160,7 +162,7 @@ func (c *CloudWatch) PutWorkerMetricData(host string, port string, namespace str
 
 	// cluster CPU metrics
 	metricInput = new(cloudwatch.PutMetricDataInput)
-	metricInput.SetNamespace(namespace)
+	metricInput.SetNamespace(config.namespace)
 	var clusterCPUMetricsData []*cloudwatch.MetricDatum
 
 	clusterCPUMetrics := ClusterCPUMetrics{
@@ -168,8 +170,8 @@ func (c *CloudWatch) PutWorkerMetricData(host string, port string, namespace str
 		ClusterSystemCPUUtilisation:      Sum(clusterSystemCPUUtilisation),
 		MedianWorkerUserCPUUtilisation:   Median(clusterUserCPUUtilisation),
 		MedianWorkerSystemCPUUtilisation: Median(clusterSystemCPUUtilisation),
-		MeanWorkerUserCPUUtilisation:     Sum(clusterUserCPUUtilisation) / float64(len(workers)),
-		MeanWorkerSystemCPUUtilisation:   Sum(clusterSystemCPUUtilisation) / float64(len(workers)),
+		MeanWorkerUserCPUUtilisation:     Sum(clusterUserCPUUtilisation) / float64(len(workersList)),
+		MeanWorkerSystemCPUUtilisation:   Sum(clusterSystemCPUUtilisation) / float64(len(workersList)),
 	}
 	v = reflect.ValueOf(clusterCPUMetrics)
 	typeOfS = v.Type()
@@ -181,7 +183,7 @@ func (c *CloudWatch) PutWorkerMetricData(host string, port string, namespace str
 		var dimensions []*cloudwatch.Dimension
 		dimension := new(cloudwatch.Dimension)
 		dimension.SetName("prestoStackName")
-		dimension.SetValue(stackName)
+		dimension.SetValue(config.stackName)
 		dimensions = append(dimensions, dimension)
 		metricData.SetDimensions(dimensions)
 		clusterCPUMetricsData = append(clusterCPUMetricsData, metricData)
@@ -196,22 +198,27 @@ func (c *CloudWatch) PutWorkerMetricData(host string, port string, namespace str
 	return nil
 }
 
-func (c *CloudWatch) PutMetricData(host string, port string, namespace string, stackName string) error {
-	err := c.PutClusterMetricData(host, port, namespace, stackName)
+func (c *CloudWatch) PutMetricData(config Config) error {
+	err := c.PutClusterMetricData(config)
 	if err != nil {
 		fmt.Println(err)
 	}
 
-	err = c.PutWorkerMetricData(host, port, namespace, stackName)
+	err = c.PutWorkerMetricData(config)
 	if err != nil {
 		fmt.Println(err)
 	}
 	return nil
 }
 
-func cloudwatchAgentStart(host string, port string, namespace string, stackName string) {
+func cloudwatchAgentStart(host string, port string, namespace string, stackName string, apiPrefix string) {
 	c := CloudWatch{}
-	err := c.PutMetricData(host, port, namespace, stackName)
+	err := c.PutMetricData(Config{apiPrefix: apiPrefix,
+		host:      host,
+		port:      port,
+		namespace: namespace,
+		stackName: stackName,
+	})
 	if err != nil {
 		fmt.Errorf("%s", err)
 	}
