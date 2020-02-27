@@ -116,13 +116,13 @@ func (c *CloudWatch) PutWorkerMetricData(config Config) error {
 			metricData.SetDimensions(dimensions)
 			metricsData = append(metricsData, metricData)
 		}
-	}
-
-	metricInput.SetMetricData(metricsData)
-	_, err = svc.PutMetricData(metricInput)
-	if err != nil {
-		_ = fmt.Errorf("%s", err)
-		return err
+		metricInput.SetMetricData(metricsData)
+		_, err = svc.PutMetricData(metricInput)
+		if err != nil {
+			_ = fmt.Errorf("%s", err)
+			return err
+		}
+		metricsData = nil
 	}
 
 	// cluster memory metrics
