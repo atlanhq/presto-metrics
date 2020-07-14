@@ -15,7 +15,7 @@ type CloudWatch struct {
 
 func (c *CloudWatch) PutClusterMetricData(config Config) error {
 	svc := cloudwatch.New(session.Must(session.NewSession()),
-		aws.NewConfig().WithRegion("ap-south-1"))
+		aws.NewConfig().WithRegion(config.region))
 
 	// cluster level metrics
 	metricInput := new(cloudwatch.PutMetricDataInput)
@@ -52,7 +52,7 @@ func (c *CloudWatch) PutClusterMetricData(config Config) error {
 
 func (c *CloudWatch) PutWorkerMetricData(config Config) error {
 	svc := cloudwatch.New(session.Must(session.NewSession()),
-		aws.NewConfig().WithRegion("ap-south-1"))
+		aws.NewConfig().WithRegion(config.region))
 
 	// worker level metrics
 	metricInput := new(cloudwatch.PutMetricDataInput)
@@ -211,15 +211,16 @@ func (c *CloudWatch) PutMetricData(config Config) error {
 	return nil
 }
 
-func cloudwatchAgentStart(host string, port string, namespace string, stackName string, apiPrefix string) {
+func cloudwatchAgentStart(host string, port string, namespace string, stackName string, apiPrefix string, region string) {
 	c := CloudWatch{}
 	err := c.PutMetricData(Config{apiPrefix: apiPrefix,
 		host:      host,
 		port:      port,
 		namespace: namespace,
 		stackName: stackName,
+		region:    region,
 	})
 	if err != nil {
-		fmt.Errorf("%s", err)
+		_ = fmt.Errorf("%s", err)
 	}
 }

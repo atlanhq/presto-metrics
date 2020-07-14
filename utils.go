@@ -25,6 +25,7 @@ type Config struct {
 	stackName string
 	apiPrefix string
 	namespace string
+	region    string
 }
 
 type unitMap map[string]float64
