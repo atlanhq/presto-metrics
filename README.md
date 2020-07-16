@@ -1,13 +1,14 @@
-# Presto Metrics
+# Presto Metrics 
+![Go](https://github.com/atlanhq/presto-metrics/workflows/Go/badge.svg)
 
 This is an agent which scraps metrics from Presto and pushes it to AWS Cloudwatch and also serves them on a prometheus compatible endpoint. 
 
 ## Table of Contents
 
-- Compatibility
-- Build and Run
-- Metrics
-- Contribute
+- [Compatibility](https://github.com/atlanhq/presto-metrics#Compatibility)
+- [Build and Run](https://github.com/atlanhq/presto-metrics#Build%20and%20Run)
+- [Metrics](https://github.com/atlanhq/presto-metrics#Metrics)
+- [Contribute](https://github.com/atlanhq/presto-metrics#Contribute)
 
 ### Compatibility
 
@@ -44,7 +45,7 @@ We recommend to install the agent inside the presto coordinator. See [releases p
                 --web.cloudwatch-region=<cloudwatch_region_to_push_metrics>
 ```
 
-#### Metrics
+### Metrics
 
 ```bash
 # HELP atlan_presto_active_workers Active workers of the presto cluster.
@@ -167,7 +168,7 @@ atlan_presto_worker_total_node_memory{prestoStackName="presto-oss-107",prestoWor
 atlan_presto_worker_total_node_memory{prestoStackName="presto-oss-107",prestoWorkerId="i-0540e97929f83f8bd"} 0
 ```
 
-#### Contribute
+### Contribute
 
 1. Fork it
 2. Create your feature branch (`git checkout -b my-new-feature`)
