@@ -1,4 +1,4 @@
-FROM golang:latest as builder
+FROM golang:1.13.4 as builder
 
 MAINTAINER arpit@atlan.com
 COPY . "/go/src/github.com/atlanhq/presto-metrics/"
