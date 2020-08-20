@@ -1,38 +1,50 @@
-name: Go
+name: Package Docker Image
 
 on:
   push:
-    branches: [ master ]
-  pull_request:
-    branches: [ master ]
+    branches: 
+      - "*"
+    paths:
+      - "**"
+      - "!images/**"
+      - "!**.png"
+
 
 jobs:
-
   build:
-    name: Build
     runs-on: ubuntu-latest
     steps:
-
-    - name: Set up Go 1.13
-      uses: actions/setup-go@v1
+    - uses: actions/checkout@v1
       with:
-        go-version: 1.13
-      id: go
+        fetch-depth: 0
 
-    - name: Check out code into the Go module directory
-      uses: actions/checkout@v2
+    - name: Get branch name
+      run: echo "##[set-output name=branch;]$(echo ${GITHUB_REF#refs/heads/})"
+      id: get_branch
 
-    - name: Get dependencies
+    - run:   echo ::set-env name=REPOSITORY_NAME::$(echo "$GITHUB_REPOSITORY" | awk -F / '{print $2}' | sed -e "s/:refs//")
+      shell: bash
+
+    - name: Get version tag
+      run: echo "##[set-output name=version;]$(echo `git ls-remote https://${{ secrets.my_pat }}@github.com/atlanhq/${REPOSITORY_NAME}.git ${{ steps.get_branch.outputs.branch }} | awk '{ print $1}' | cut -c1-7`)abcd"
+      id: get_version
+
+    - name: Create images
       run: |
-        mkdir -p /home/runner/go/bin /home/runner/go/src/github.com/atlanhq/
-        cp -r /home/runner/work/presto-metrics/ /home/runner/go/src/github.com/atlanhq/
-        export PATH=:/home/runner/go/bin:$PATH
-        cd /home/runner/go/src/github.com/atlanhq/presto-metrics
-        go get -v -t -d ./...
-        if [ -f Gopkg.toml ]; then
-            curl https://raw.githubusercontent.com/golang/dep/master/install.sh | sh
-            dep ensure
-        fi
-
-    - name: Build
-      run: go build -v .
+         docker build --build-arg ACCESS_TOKEN_USR=$GITHUB_ACTOR --build-arg ACCESS_TOKEN_PWD=${{ secrets.my_pat }} -t docker.pkg.github.com/$GITHUB_REPOSITORY/${REPOSITORY_NAME}-${{ steps.get_branch.outputs.branch }}:latest .
+         docker tag docker.pkg.github.com/$GITHUB_REPOSITORY/${REPOSITORY_NAME}-${{ steps.get_branch.outputs.branch }}:latest docker.pkg.github.com/$GITHUB_REPOSITORY/${REPOSITORY_NAME}-${{ steps.get_branch.outputs.branch }}:${{ steps.get_version.outputs.version }}
+         docker login docker.pkg.github.com -u $GITHUB_ACTOR -p ${{ secrets.my_pat }}
+         docker push docker.pkg.github.com/${GITHUB_REPOSITORY}/${REPOSITORY_NAME}-${{ steps.get_branch.outputs.branch }}:latest
+         docker push docker.pkg.github.com/${GITHUB_REPOSITORY}/${REPOSITORY_NAME}-${{ steps.get_branch.outputs.branch }}:${{ steps.get_version.outputs.version }}
+    # Send a slack notification message on the specified channel with the failure github actions workflow report.
+    - name: Slack Notification
+      uses: rtCamp/action-slack-notify@v2.0.0
+      if: failure()
+      env:
+        SLACK_CHANNEL: general
+        SLACK_COLOR: '#3278BD'
+        SLACK_ICON: https://cdn3.iconfinder.com/data/icons/popular-services-brands/512/github-512.png
+        SLACK_MESSAGE: "- @infra, Job ${{ job.status }} :rocket:"
+        SLACK_TITLE: Message
+        SLACK_USERNAME: Github-Actions
+        SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
