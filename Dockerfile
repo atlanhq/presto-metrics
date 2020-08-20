@@ -5,6 +5,10 @@ COPY . "/go/src/github.com/atlanhq/presto-metrics/"
 
 WORKDIR "/go/src/github.com/atlanhq/presto-metrics"
 
+RUN curl https://raw.githubusercontent.com/golang/dep/master/install.sh | sh
+
+RUN dep ensure
+
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o /presto_metrics
 
 FROM alpine:latest
